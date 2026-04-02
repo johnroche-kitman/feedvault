@@ -208,47 +208,78 @@
                 <!-- Instagram Session -->
                 <div class="settings-card">
                     <h3><span class="material-icons-outlined">lock_open</span> Connect Instagram</h3>
-                    <p class="settings-desc">To load posts from accounts you follow, connect your Instagram session. This is a private key from your browser — MyFeed uses it to fetch posts on your behalf.</p>
+                    <p class="settings-desc">Connect your Instagram account so MyFeed can load posts from accounts you follow.</p>
 
                     <div id="ig-session-status"></div>
 
-                    <!-- Step-by-step guide -->
-                    <div class="cookie-steps" id="cookie-setup-steps">
-                        <p class="steps-title">How to get your session key:</p>
-                        <ol class="steps-list">
-                            <li>Open <strong>Instagram.com</strong> in Chrome and log in</li>
-                            <li>Press <strong>F12</strong> (or right-click → Inspect)</li>
-                            <li>Click the <strong>Application</strong> tab</li>
-                            <li>In the left panel: <strong>Cookies → https://www.instagram.com</strong></li>
-                            <li>Find the row named <strong>sessionid</strong> and copy its value</li>
-                            <li>Paste it below and click Connect</li>
-                        </ol>
-                        <div class="cookie-visual">
-                            <span class="material-icons-outlined">table_rows</span>
-                            <span>Name: <strong>sessionid</strong> &nbsp;|&nbsp; Value: <em>a long string of letters and numbers</em></span>
-                        </div>
-                    </div>
-
                     <div id="ig-session-form">
-                        <div class="input-group" style="margin-top:12px">
-                            <span class="material-icons-outlined">vpn_key</span>
-                            <input type="password" id="ig-session-input" placeholder="Paste your sessionid value here">
-                            <button class="show-hide-btn" onclick="toggleSessionVisibility()" title="Show/hide">
-                                <span class="material-icons-outlined" id="session-eye-icon">visibility</span>
+                        <!-- Tab switcher -->
+                        <div class="connect-tabs">
+                            <button class="connect-tab active" id="tab-login" onclick="switchConnectTab('login')">
+                                <span class="material-icons-outlined">login</span> Log in
+                            </button>
+                            <button class="connect-tab" id="tab-manual" onclick="switchConnectTab('manual')">
+                                <span class="material-icons-outlined">vpn_key</span> Paste cookie
                             </button>
                         </div>
-                        <div style="display:flex;gap:8px;margin-top:8px">
-                            <button class="btn btn-primary" style="flex:1" onclick="saveIGSession()">
+
+                        <!-- Login tab -->
+                        <div id="connect-tab-login">
+                            <div class="input-group">
+                                <span class="material-icons-outlined">alternate_email</span>
+                                <input type="text" id="ig-login-username" placeholder="Instagram username" autocomplete="username">
+                            </div>
+                            <div class="input-group">
+                                <span class="material-icons-outlined">lock</span>
+                                <input type="password" id="ig-login-password" placeholder="Password" autocomplete="current-password">
+                            </div>
+                            <button class="btn btn-primary" onclick="handleIGLogin()" id="ig-login-btn">
+                                <span class="material-icons-outlined">login</span> Connect Instagram
+                            </button>
+                            <div id="ig-login-error" class="error-msg"></div>
+
+                            <!-- 2FA step (hidden until needed) -->
+                            <div id="ig-2fa-step" style="display:none">
+                                <p class="twofa-prompt" id="ig-2fa-prompt"></p>
+                                <div class="input-group">
+                                    <span class="material-icons-outlined">pin</span>
+                                    <input type="text" id="ig-2fa-code" placeholder="6-digit code" maxlength="6" inputmode="numeric">
+                                </div>
+                                <button class="btn btn-primary" onclick="handleIG2FA()">
+                                    <span class="material-icons-outlined">check_circle</span> Verify
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Manual cookie tab -->
+                        <div id="connect-tab-manual" style="display:none">
+                            <div class="cookie-steps">
+                                <p class="steps-title">Get your session key from Chrome:</p>
+                                <ol class="steps-list">
+                                    <li>Open <strong>Instagram.com</strong> in Chrome and log in</li>
+                                    <li>Press <strong>F12</strong> → <strong>Application</strong> tab</li>
+                                    <li>Left panel: <strong>Cookies → instagram.com</strong></li>
+                                    <li>Find <strong>sessionid</strong> and copy the value</li>
+                                </ol>
+                            </div>
+                            <div class="input-group" style="margin-top:12px">
+                                <span class="material-icons-outlined">vpn_key</span>
+                                <input type="password" id="ig-session-input" placeholder="Paste sessionid value here">
+                                <button class="show-hide-btn" onclick="toggleSessionVisibility()" title="Show/hide">
+                                    <span class="material-icons-outlined" id="session-eye-icon">visibility</span>
+                                </button>
+                            </div>
+                            <button class="btn btn-primary" onclick="saveIGSession()">
                                 <span class="material-icons-outlined">check_circle</span> Connect
                             </button>
                         </div>
-                    </div>
 
-                    <div class="info-box" style="margin-top:12px">
-                        <span class="material-icons-outlined">security</span>
-                        <div>
-                            <strong>Privacy note</strong>
-                            <p>Your session key is stored only in your browser and sent only to MyFeed's own server to fetch posts. It is never shared with third parties. You can disconnect at any time.</p>
+                        <div class="info-box" style="margin-top:16px">
+                            <span class="material-icons-outlined">security</span>
+                            <div>
+                                <strong>Privacy note</strong>
+                                <p>Your credentials are used only to obtain a session key and are never stored. The session key is saved in your browser only.</p>
+                            </div>
                         </div>
                     </div>
                 </div>

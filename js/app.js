@@ -164,12 +164,109 @@ function toggleSessionVisibility() {
     const input = document.getElementById('ig-session-input');
     const icon  = document.getElementById('session-eye-icon');
     if (input.type === 'password') {
-        input.type  = 'text';
+        input.type = 'text';
         icon.textContent = 'visibility_off';
     } else {
-        input.type  = 'password';
+        input.type = 'password';
         icon.textContent = 'visibility';
     }
+}
+
+function switchConnectTab(tab) {
+    document.getElementById('connect-tab-login').style.display  = tab === 'login'  ? '' : 'none';
+    document.getElementById('connect-tab-manual').style.display = tab === 'manual' ? '' : 'none';
+    document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
+    document.getElementById('tab-manual').classList.toggle('active', tab === 'manual');
+}
+
+let igLoginTwoFactorId = null;
+
+async function handleIGLogin() {
+    const username = document.getElementById('ig-login-username').value.trim();
+    const password = document.getElementById('ig-login-password').value;
+    const errEl    = document.getElementById('ig-login-error');
+    const btn      = document.getElementById('ig-login-btn');
+
+    if (!username || !password) { errEl.textContent = 'Enter your Instagram username and password.'; return; }
+
+    errEl.textContent  = '';
+    btn.disabled       = true;
+    btn.innerHTML      = '<span class="material-icons-outlined">hourglass_top</span> Connecting…';
+
+    try {
+        const res  = await fetch('/api/instagram-login', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+
+        if (data.sessionId) {
+            applyIGSession(data.sessionId);
+            return;
+        }
+
+        if (data.twoFactorRequired) {
+            igLoginTwoFactorId = data.twoFactorId;
+            const method = data.method === 'app' ? 'authenticator app' : 'SMS';
+            document.getElementById('ig-2fa-prompt').textContent =
+                `Enter the 6-digit code sent to your ${method}.`;
+            document.getElementById('ig-2fa-step').style.display = '';
+            document.getElementById('ig-login-btn').style.display = 'none';
+            errEl.textContent = '';
+            return;
+        }
+
+        errEl.textContent = data.error || 'Login failed. Please try again.';
+    } catch (e) {
+        errEl.textContent = 'Connection error. Make sure you\'re on the deployed Vercel site.';
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = '<span class="material-icons-outlined">login</span> Connect Instagram';
+    }
+}
+
+async function handleIG2FA() {
+    const code  = document.getElementById('ig-2fa-code').value.trim();
+    const errEl = document.getElementById('ig-login-error');
+    if (!code || code.length < 6) { errEl.textContent = 'Enter the 6-digit code.'; return; }
+
+    const username = document.getElementById('ig-login-username').value.trim();
+    const password = document.getElementById('ig-login-password').value;
+
+    errEl.textContent = '';
+
+    try {
+        const res  = await fetch('/api/instagram-login', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ username, password, twoFactorCode: code, twoFactorId: igLoginTwoFactorId }),
+        });
+        const data = await res.json();
+
+        if (data.sessionId) {
+            applyIGSession(data.sessionId);
+            return;
+        }
+        errEl.textContent = data.error || 'Incorrect code. Try again.';
+    } catch (e) {
+        errEl.textContent = 'Connection error.';
+    }
+}
+
+function applyIGSession(sessionId) {
+    const user = getCurrentUser();
+    user.igSession = sessionId;
+    saveCurrentUser(user);
+
+    // Clear cache so feed re-fetches
+    const cache = getIGCache();
+    (user.following || []).forEach(f => delete cache[f.username]);
+    saveIGCache(cache);
+
+    updateIGSessionUI();
+    showToast('Instagram connected! Loading your feed…');
+    setTimeout(() => showSection('feed'), 500);
 }
 
 function updateIGSessionUI() {
@@ -644,8 +741,10 @@ document.addEventListener('keydown', e => {
     const id = document.activeElement.id;
     if (id === 'login-username' || id === 'login-password') handleLogin();
     if (['signup-displayname','signup-username','signup-password','signup-password-confirm'].includes(id)) handleSignup();
-    if (id === 'ig-username-input') handleAddAccount();
-    if (id === 'ig-link-username')  linkInstagram();
+    if (id === 'ig-username-input')  handleAddAccount();
+    if (id === 'ig-link-username')   linkInstagram();
+    if (id === 'ig-login-username' || id === 'ig-login-password') handleIGLogin();
+    if (id === 'ig-2fa-code')        handleIG2FA();
 });
 
 // ---- Init --------------------------------------------------
