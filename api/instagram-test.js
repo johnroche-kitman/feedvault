@@ -42,21 +42,20 @@ export default async function handler(req, res) {
             return res.status(200).json(result);
         }
 
-        // Step 2: call web_profile_info
+        // Step 2: call web_profile_info (single request, no csrf needed for GET)
         result.steps.push('Calling web_profile_info API…');
         const apiRes = await fetch(
             `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
             {
                 headers: {
-                    'x-ig-app-id': '936619743392459',
-                    'x-csrftoken':  csrf,
-                    'User-Agent':   UA,
-                    'Accept':       '*/*',
-                    'Referer':      `https://www.instagram.com/${username}/`,
-                    'Origin':       'https://www.instagram.com',
+                    'x-ig-app-id':    '936619743392459',
+                    'User-Agent':     UA,
+                    'Accept':         '*/*',
+                    'Referer':        `https://www.instagram.com/${username}/`,
+                    'Origin':         'https://www.instagram.com',
                     'sec-fetch-site': 'same-origin',
                     'sec-fetch-mode': 'cors',
-                    'Cookie': `sessionid=${sessionId}; csrftoken=${csrf}`,
+                    'Cookie':         `sessionid=${sessionId}`,
                 },
             }
         );

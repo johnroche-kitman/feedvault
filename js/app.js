@@ -606,9 +606,11 @@ async function fetchAndRenderAccount(username) {
     const data = await getIGPostsCached(username);
 
     if (!data || !data.posts || data.posts.length === 0) {
-        let msg  = 'Could not load posts. This account may be private.';
+        let msg  = 'Could not load posts. This account may be private or Instagram is temporarily blocking requests.';
         let action = '';
-        if (!getIGSession() || data?.setup) {
+        if (data?.rateLimit) {
+            msg = 'Instagram rate limit hit — wait a few minutes and click Refresh.';
+        } else if (!getIGSession() || data?.setup) {
             msg = 'Connect your Instagram session in Settings to load posts.';
             action = `<button class="btn btn-primary" style="margin-top:10px;width:auto;padding:8px 16px" onclick="showSection('settings')">
                           <span class="material-icons-outlined">settings</span> Go to Settings
@@ -618,6 +620,8 @@ async function fetchAndRenderAccount(username) {
             action = `<button class="btn btn-primary" style="margin-top:10px;width:auto;padding:8px 16px" onclick="showSection('settings')">
                           <span class="material-icons-outlined">refresh</span> Reconnect
                       </button>`;
+        } else if (data?.rateLimit) {
+            // already set above
         } else if (location.port === '3000') {
             msg = 'Deploy to Vercel to load live Instagram posts.';
         }
