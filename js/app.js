@@ -394,14 +394,21 @@ async function fetchAndRenderAccount(username) {
     const data = await getIGPostsCached(username);
 
     if (!data || !data.posts || data.posts.length === 0) {
-        const isLocal = location.protocol === 'file:' || location.port === '3000';
+        let msg = 'Could not load posts. This account may be private.';
+        let extra = '';
+        if (data?.setup) {
+            msg = 'Almost there! Add your Instagram session cookie to Vercel to load posts.';
+            extra = `<a href="https://vercel.com/docs/projects/environment-variables" target="_blank" rel="noopener" class="btn-visit" style="margin-top:8px">How to add env variable →</a>`;
+        } else if (data?.expired) {
+            msg = 'Instagram session expired. Refresh your INSTAGRAM_SESSION_ID in Vercel.';
+        } else if (location.port === '3000') {
+            msg = 'Deploy to Vercel to load live Instagram posts.';
+        }
         grid.innerHTML = `
             <div class="ig-fetch-failed">
                 <span class="material-icons-outlined">cloud_off</span>
-                <p>${isLocal
-                    ? 'Deploy to Vercel to enable live Instagram posts — the API only works when hosted.'
-                    : 'Could not load posts. This account may be private, or Instagram is blocking the request.'
-                }</p>
+                <p>${msg}</p>
+                ${extra}
                 <a href="https://instagram.com/${encodeURIComponent(username)}" target="_blank" rel="noopener" class="btn-visit">
                     View @${escapeHtml(username)} on Instagram <span class="material-icons-outlined" style="font-size:14px">open_in_new</span>
                 </a>

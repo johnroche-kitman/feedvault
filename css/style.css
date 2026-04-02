@@ -8,9 +8,9 @@
     --text-secondary: #65676b;
     --text-muted: #8e8e8e;
     --border: #dbdbdb;
-    --primary: #6c5ce7;
-    --primary-hover: #5a4bd1;
-    --primary-light: #e8e5fc;
+    --primary: #e03030;
+    --primary-hover: #c42828;
+    --primary-light: #fdecea;
     --accent: #e1306c;
     --accent-hover: #c92a5e;
     --danger: #e74c3c;
@@ -36,7 +36,7 @@
     --text-secondary: #b0b3b8;
     --text-muted: #6b6d72;
     --border: #2d2d3a;
-    --primary-light: #1e1a3a;
+    --primary-light: #3a1010;
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
     --shadow: 0 2px 12px rgba(0,0,0,0.3);
     --shadow-lg: 0 8px 30px rgba(0,0,0,0.4);
@@ -83,7 +83,7 @@ img { max-width: 100%; display: block; }
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #e03030 0%, #a01010 100%);
 }
 
 .auth-brand {

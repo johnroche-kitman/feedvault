@@ -1,8 +1,7 @@
-// Vercel serverless function — fetches Instagram profile + recent posts server-side.
-// No CORS issues, proper headers, cached at Vercel edge for 20 minutes.
+// Vercel serverless function — fetches Instagram posts server-side.
+// Requires INSTAGRAM_SESSION_ID environment variable set in Vercel dashboard.
 
 export default async function handler(req, res) {
-    // CORS — allow calls from any origin (our static frontend)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
 
@@ -11,28 +10,47 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid username' });
     }
 
+    const sessionId = process.env.INSTAGRAM_SESSION_ID;
+    if (!sessionId) {
+        return res.status(503).json({
+            error: 'INSTAGRAM_SESSION_ID not configured',
+            setup: true
+        });
+    }
+
+    const headers = {
+        'x-ig-app-id': '936619743392459',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': `https://www.instagram.com/${encodeURIComponent(username)}/`,
+        'Origin': 'https://www.instagram.com',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        'Cookie': `sessionid=${sessionId}`,
+    };
+
     const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username.toLowerCase())}`;
 
     try {
-        const igRes = await fetch(url, {
-            headers: {
-                'x-ig-app-id': '936619743392459',
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://www.instagram.com/',
-                'Origin': 'https://www.instagram.com',
-                'X-Requested-With': 'XMLHttpRequest',
-            }
-        });
+        const igRes = await fetch(url, { headers });
 
-        if (igRes.status === 404) return res.status(404).json({ error: 'Account not found' });
-        if (igRes.status === 401) return res.status(401).json({ error: 'Instagram requires login for this account' });
-        if (!igRes.ok) return res.status(igRes.status).json({ error: `Instagram returned ${igRes.status}` });
+        if (igRes.status === 302 || igRes.status === 401) {
+            return res.status(401).json({ error: 'Session expired — update INSTAGRAM_SESSION_ID in Vercel', expired: true });
+        }
+        if (igRes.status === 404) {
+            return res.status(404).json({ error: 'Account not found' });
+        }
+        if (!igRes.ok) {
+            return res.status(igRes.status).json({ error: `Instagram returned ${igRes.status}` });
+        }
 
         const json = await igRes.json();
         const userData = json?.data?.user;
-        if (!userData) return res.status(404).json({ error: 'Account not found or private' });
+        if (!userData) {
+            return res.status(404).json({ error: 'Account not found or private' });
+        }
 
         const media = userData.edge_owner_to_timeline_media || userData.edge_felix_video_timeline;
         const edges = media?.edges || [];
@@ -56,22 +74,21 @@ export default async function handler(req, res) {
             };
         });
 
-        // Cache at Vercel edge for 20 minutes
         res.setHeader('Cache-Control', 's-maxage=1200, stale-while-revalidate=600');
 
         return res.status(200).json({
-            username:    userData.username,
-            fullName:    userData.full_name,
-            profilePic:  userData.profile_pic_url,
-            bio:         userData.biography,
-            postCount:   userData.edge_owner_to_timeline_media?.count ?? 0,
-            hasMore:     pageInfo.has_next_page || false,
-            nextCursor:  pageInfo.end_cursor || null,
+            username:   userData.username,
+            fullName:   userData.full_name,
+            profilePic: userData.profile_pic_url,
+            bio:        userData.biography,
+            postCount:  media?.count ?? 0,
+            hasMore:    pageInfo.has_next_page || false,
+            nextCursor: pageInfo.end_cursor || null,
             posts,
         });
 
     } catch (err) {
         console.error('Instagram fetch error:', err);
-        return res.status(500).json({ error: 'Failed to fetch from Instagram' });
+        return res.status(500).json({ error: 'Fetch failed: ' + err.message });
     }
 }
