@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeedVault — Your Curated Social Feed</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+</head>
+<body>
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="screen active">
+        <div class="auth-container">
+            <div class="auth-brand">
+                <div class="brand-icon">
+                    <span class="material-icons-outlined">dynamic_feed</span>
+                </div>
+                <h1>FeedVault</h1>
+                <p class="tagline">Your curated Instagram feed. Follow only the accounts you choose.</p>
+            </div>
+
+            <!-- Login Form -->
+            <div id="login-form" class="auth-form">
+                <h2>Welcome back</h2>
+                <div class="input-group">
+                    <span class="material-icons-outlined">person</span>
+                    <input type="text" id="login-username" placeholder="Username" autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <span class="material-icons-outlined">lock</span>
+                    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                </div>
+                <button class="btn btn-primary" onclick="handleLogin()">Log In</button>
+                <p class="auth-switch">Don't have an account? <a href="#" onclick="showSignup()">Sign up</a></p>
+                <div id="login-error" class="error-msg"></div>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signup-form" class="auth-form" style="display:none">
+                <h2>Create your account</h2>
+                <div class="input-group">
+                    <span class="material-icons-outlined">badge</span>
+                    <input type="text" id="signup-displayname" placeholder="Display Name">
+                </div>
+                <div class="input-group">
+                    <span class="material-icons-outlined">person</span>
+                    <input type="text" id="signup-username" placeholder="Username" autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <span class="material-icons-outlined">lock</span>
+                    <input type="password" id="signup-password" placeholder="Password (min 6 characters)" autocomplete="new-password">
+                </div>
+                <div class="input-group">
+                    <span class="material-icons-outlined">lock</span>
+                    <input type="password" id="signup-password-confirm" placeholder="Confirm Password" autocomplete="new-password">
+                </div>
+                <button class="btn btn-primary" onclick="handleSignup()">Create Account</button>
+                <p class="auth-switch">Already have an account? <a href="#" onclick="showLogin()">Log in</a></p>
+                <div id="signup-error" class="error-msg"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app-screen" class="screen">
+        <!-- Top Nav -->
+        <header class="top-nav">
+            <div class="nav-inner">
+                <div class="nav-brand" onclick="showSection('feed')">
+                    <span class="material-icons-outlined">dynamic_feed</span>
+                    <span class="brand-text">FeedVault</span>
+                </div>
+                <nav class="nav-links">
+                    <button class="nav-btn active" data-section="feed" onclick="showSection('feed')">
+                        <span class="material-icons-outlined">home</span>
+                        <span class="nav-label">Feed</span>
+                    </button>
+                    <button class="nav-btn" data-section="create" onclick="showSection('create')">
+                        <span class="material-icons-outlined">add_circle</span>
+                        <span class="nav-label">Post</span>
+                    </button>
+                    <button class="nav-btn" data-section="manage" onclick="showSection('manage')">
+                        <span class="material-icons-outlined">people</span>
+                        <span class="nav-label">Following</span>
+                    </button>
+                    <button class="nav-btn" data-section="settings" onclick="showSection('settings')">
+                        <span class="material-icons-outlined">settings</span>
+                        <span class="nav-label">Settings</span>
+                    </button>
+                </nav>
+                <div class="nav-user">
+                    <div class="user-avatar" id="nav-avatar"></div>
+                    <span id="nav-username"></span>
+                    <button class="nav-btn" onclick="handleLogout()" title="Log out">
+                        <span class="material-icons-outlined">logout</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Feed Section -->
+        <main id="section-feed" class="section active">
+            <div class="section-inner">
+                <div class="feed-header">
+                    <h2>Your Feed</h2>
+                    <button class="btn btn-sm" onclick="refreshFeed()">
+                        <span class="material-icons-outlined">refresh</span> Refresh
+                    </button>
+                </div>
+                <div id="feed-container" class="feed-grid">
+                    <!-- Posts render here -->
+                </div>
+                <div id="feed-empty" class="empty-state" style="display:none">
+                    <span class="material-icons-outlined">photo_library</span>
+                    <h3>Your feed is empty</h3>
+                    <p>Start by adding Instagram accounts to follow, or create your first post!</p>
+                    <div class="empty-actions">
+                        <button class="btn btn-primary" onclick="showSection('manage')">Add Instagram Accounts</button>
+                        <button class="btn btn-outline" onclick="showSection('create')">Create a Post</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Create Post Section -->
+        <main id="section-create" class="section">
+            <div class="section-inner section-narrow">
+                <h2>Create Post</h2>
+                <div class="create-card">
+                    <div class="image-upload-area" id="image-upload-area" onclick="document.getElementById('image-input').click()">
+                        <input type="file" id="image-input" accept="image/*" style="display:none" onchange="handleImageSelect(event)">
+                        <div id="image-preview-container" style="display:none">
+                            <img id="image-preview" src="" alt="Preview">
+                            <button class="btn-remove-img" onclick="removeImage(event)">
+                                <span class="material-icons-outlined">close</span>
+                            </button>
+                        </div>
+                        <div id="image-placeholder">
+                            <span class="material-icons-outlined">add_photo_alternate</span>
+                            <p>Click to add a photo</p>
+                            <span class="hint">JPG, PNG, GIF up to 10MB</span>
+                        </div>
+                    </div>
+                    <textarea id="post-caption" placeholder="Write a caption..." rows="4"></textarea>
+                    <div class="post-options">
+                        <label class="toggle-option" id="crosspost-toggle" style="display:none">
+                            <input type="checkbox" id="crosspost-ig" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">
+                                <span class="material-icons-outlined">share</span>
+                                Also post to Instagram
+                            </span>
+                        </label>
+                    </div>
+                    <button class="btn btn-primary btn-full" onclick="handleCreatePost()">
+                        <span class="material-icons-outlined">send</span> Publish Post
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Manage Instagram Accounts -->
+        <main id="section-manage" class="section">
+            <div class="section-inner section-narrow">
+                <h2>Instagram Accounts You Follow</h2>
+                <p class="section-desc">Add public Instagram accounts to see their latest posts in your feed.</p>
+                <div class="add-account-form">
+                    <div class="input-group">
+                        <span class="material-icons-outlined">alternate_email</span>
+                        <input type="text" id="ig-username-input" placeholder="Instagram username (e.g. natgeo)">
+                    </div>
+                    <button class="btn btn-primary" onclick="handleAddAccount()">
+                        <span class="material-icons-outlined">person_add</span> Follow
+                    </button>
+                </div>
+                <div id="following-list" class="following-list">
+                    <!-- Followed accounts render here -->
+                </div>
+                <div id="following-empty" class="empty-state small" style="display:none">
+                    <span class="material-icons-outlined">person_search</span>
+                    <h3>No accounts yet</h3>
+                    <p>Add Instagram usernames above to start building your custom feed.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings Section -->
+        <main id="section-settings" class="section">
+            <div class="section-inner section-narrow">
+                <h2>Settings</h2>
+
+                <!-- Profile Settings -->
+                <div class="settings-card">
+                    <h3><span class="material-icons-outlined">person</span> Profile</h3>
+                    <div class="input-group">
+                        <span class="material-icons-outlined">badge</span>
+                        <input type="text" id="settings-displayname" placeholder="Display Name">
+                    </div>
+                    <div class="input-group">
+                        <span class="material-icons-outlined">info</span>
+                        <input type="text" id="settings-bio" placeholder="Bio (optional)">
+                    </div>
+                    <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+                </div>
+
+                <!-- Instagram Link -->
+                <div class="settings-card">
+                    <h3><span class="material-icons-outlined">link</span> Link Your Instagram</h3>
+                    <p class="settings-desc">Link your own Instagram account to enable cross-posting. When you create a post on FeedVault, it can automatically be shared to your Instagram.</p>
+                    <div class="ig-link-status" id="ig-link-status">
+                        <!-- Renders dynamically -->
+                    </div>
+                    <div id="ig-link-form">
+                        <div class="input-group">
+                            <span class="material-icons-outlined">alternate_email</span>
+                            <input type="text" id="ig-link-username" placeholder="Your Instagram username">
+                        </div>
+                        <button class="btn btn-primary" onclick="linkInstagram()">
+                            <span class="material-icons-outlined">link</span> Link Account
+                        </button>
+                    </div>
+                    <div class="info-box">
+                        <span class="material-icons-outlined">info</span>
+                        <div>
+                            <strong>About Instagram Cross-Posting</strong>
+                            <p>Automatic cross-posting to Instagram requires a Business or Creator account connected via the <a href="https://developers.facebook.com/docs/instagram-api/" target="_blank">Instagram Graph API</a>. This feature requires Meta developer app approval. For now, linking your account enables the cross-post toggle when creating posts — full automation can be enabled once API access is configured.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appearance -->
+                <div class="settings-card">
+                    <h3><span class="material-icons-outlined">palette</span> Appearance</h3>
+                    <label class="toggle-option">
+                        <input type="checkbox" id="dark-mode-toggle" onchange="toggleDarkMode()">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Dark Mode</span>
+                    </label>
+                </div>
+
+                <!-- Account -->
+                <div class="settings-card danger-zone">
+                    <h3><span class="material-icons-outlined">warning</span> Account</h3>
+                    <button class="btn btn-danger" onclick="handleDeleteAccount()">Delete Account</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
