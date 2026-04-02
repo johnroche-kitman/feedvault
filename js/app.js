@@ -1,5 +1,5 @@
 // ============================================================
-// FeedVault — Main Application Logic
+// MyFeed — Main Application Logic
 // ============================================================
 
 const DB_USERS   = 'fv_users';
@@ -64,7 +64,7 @@ function handleSignup() {
     saveUsers(users);
     localStorage.setItem(DB_CURRENT, username);
     enterApp();
-    showToast('Welcome to FeedVault!');
+    showToast('Welcome to MyFeed!');
 }
 
 function handleLogout() {
@@ -480,7 +480,7 @@ function renderLocalPost(post, user) {
                     <div class="post-avatar local">${initial}</div>
                     <div class="post-author-info">
                         <span class="post-author-name">${escapeHtml(post.authorDisplay || post.author)}</span>
-                        <span class="post-author-source">FeedVault${post.crossposted ? ' · <span class="ig-badge">→ Instagram</span>' : ''}</span>
+                        <span class="post-author-source">MyFeed${post.crossposted ? ' · <span class="ig-badge">→ Instagram</span>' : ''}</span>
                     </div>
                 </div>
                 ${isOwner ? `<button class="post-delete-btn" onclick="deletePost('${post.id}')" title="Delete">
