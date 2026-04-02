@@ -102,6 +102,7 @@ function enterApp() {
     if (dark) document.documentElement.setAttribute('data-theme', 'dark');
     updateIGLinkUI();
     updateCrosspostToggle();
+    updateIGSessionUI();
     showSection('feed');
 }
 
@@ -119,24 +120,94 @@ function showSection(name) {
 // Uses Instagram's own web API (same endpoint their site uses).
 // Works for public accounts — Instagram may block it for some.
 
-// API endpoint — uses Vercel serverless function when deployed,
-// falls back to a note when running locally without the server.
-function getApiBase() {
-    // On Vercel the function is at /api/instagram
-    // Locally (static file server) it won't exist — show a helpful message
-    return '/api/instagram';
+// ---- Instagram Session Management -------------------------
+function getIGSession() {
+    const user = getCurrentUser();
+    return user?.igSession || null;
 }
 
+function saveIGSession() {
+    const input = document.getElementById('ig-session-input');
+    const value = input.value.trim();
+    if (!value) { showToast('Please paste your sessionid value.'); return; }
+    if (value.length < 20) { showToast('That doesn\'t look like a valid session key.'); return; }
+
+    const user = getCurrentUser();
+    user.igSession = value;
+    saveCurrentUser(user);
+    input.value = '';
+
+    // Clear cache so feed re-fetches with new session
+    const cache = getIGCache();
+    (user.following || []).forEach(f => delete cache[f.username]);
+    saveIGCache(cache);
+
+    updateIGSessionUI();
+    showToast('Instagram connected! Refreshing feed…');
+    // Re-render feed with new session
+    setTimeout(() => showSection('feed'), 400);
+}
+
+function disconnectIGSession() {
+    if (!confirm('Disconnect your Instagram session? Posts will stop loading.')) return;
+    const user = getCurrentUser();
+    user.igSession = null;
+    saveCurrentUser(user);
+    const cache = getIGCache();
+    (user.following || []).forEach(f => delete cache[f.username]);
+    saveIGCache(cache);
+    updateIGSessionUI();
+    showToast('Instagram disconnected.');
+}
+
+function toggleSessionVisibility() {
+    const input = document.getElementById('ig-session-input');
+    const icon  = document.getElementById('session-eye-icon');
+    if (input.type === 'password') {
+        input.type  = 'text';
+        icon.textContent = 'visibility_off';
+    } else {
+        input.type  = 'password';
+        icon.textContent = 'visibility';
+    }
+}
+
+function updateIGSessionUI() {
+    const user       = getCurrentUser();
+    const statusEl   = document.getElementById('ig-session-status');
+    const formEl     = document.getElementById('ig-session-form');
+    const stepsEl    = document.getElementById('cookie-setup-steps');
+    if (!statusEl) return;
+
+    if (user.igSession) {
+        statusEl.innerHTML = `
+            <div class="ig-linked" style="margin-bottom:12px">
+                <span class="material-icons-outlined">check_circle</span>
+                <span>Instagram connected</span>
+                <button class="btn-unlink" onclick="disconnectIGSession()">Disconnect</button>
+            </div>`;
+        formEl.style.display  = 'none';
+        stepsEl.style.display = 'none';
+    } else {
+        statusEl.innerHTML    = '';
+        formEl.style.display  = '';
+        stepsEl.style.display = '';
+    }
+}
+
+// ---- Instagram API fetch -----------------------------------
 async function fetchIGPosts(username) {
-    const url = `${getApiBase()}?username=${encodeURIComponent(username)}`;
+    const session = getIGSession();
+    const params  = new URLSearchParams({ username });
+    if (session) params.set('session', session);
+
     try {
-        const res = await fetch(url);
+        const res = await fetch(`/api/instagram?${params}`);
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || 'HTTP ' + res.status);
+            return { error: err.error || 'HTTP ' + res.status, setup: err.setup, expired: err.expired };
         }
         const data = await res.json();
-        // Attach username to each post
         data.posts = (data.posts || []).map(p => ({ ...p, username }));
         return data;
     } catch (err) {
@@ -394,13 +465,18 @@ async function fetchAndRenderAccount(username) {
     const data = await getIGPostsCached(username);
 
     if (!data || !data.posts || data.posts.length === 0) {
-        let msg = 'Could not load posts. This account may be private.';
-        let extra = '';
-        if (data?.setup) {
-            msg = 'Almost there! Add your Instagram session cookie to Vercel to load posts.';
-            extra = `<a href="https://vercel.com/docs/projects/environment-variables" target="_blank" rel="noopener" class="btn-visit" style="margin-top:8px">How to add env variable →</a>`;
+        let msg  = 'Could not load posts. This account may be private.';
+        let action = '';
+        if (!getIGSession() || data?.setup) {
+            msg = 'Connect your Instagram session in Settings to load posts.';
+            action = `<button class="btn btn-primary" style="margin-top:10px;width:auto;padding:8px 16px" onclick="showSection('settings')">
+                          <span class="material-icons-outlined">settings</span> Go to Settings
+                      </button>`;
         } else if (data?.expired) {
-            msg = 'Instagram session expired. Refresh your INSTAGRAM_SESSION_ID in Vercel.';
+            msg = 'Instagram session expired — go to Settings and reconnect.';
+            action = `<button class="btn btn-primary" style="margin-top:10px;width:auto;padding:8px 16px" onclick="showSection('settings')">
+                          <span class="material-icons-outlined">refresh</span> Reconnect
+                      </button>`;
         } else if (location.port === '3000') {
             msg = 'Deploy to Vercel to load live Instagram posts.';
         }
@@ -408,8 +484,8 @@ async function fetchAndRenderAccount(username) {
             <div class="ig-fetch-failed">
                 <span class="material-icons-outlined">cloud_off</span>
                 <p>${msg}</p>
-                ${extra}
-                <a href="https://instagram.com/${encodeURIComponent(username)}" target="_blank" rel="noopener" class="btn-visit">
+                ${action}
+                <a href="https://instagram.com/${encodeURIComponent(username)}" target="_blank" rel="noopener" class="btn-visit" style="margin-top:8px">
                     View @${escapeHtml(username)} on Instagram <span class="material-icons-outlined" style="font-size:14px">open_in_new</span>
                 </a>
             </div>`;

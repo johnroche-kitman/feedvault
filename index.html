@@ -205,28 +205,67 @@
                     <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
                 </div>
 
-                <!-- Instagram Link -->
+                <!-- Instagram Session -->
                 <div class="settings-card">
-                    <h3><span class="material-icons-outlined">link</span> Link Your Instagram</h3>
-                    <p class="settings-desc">Link your own Instagram account to enable cross-posting. When you create a post on MyFeed, it can automatically be shared to your Instagram.</p>
-                    <div class="ig-link-status" id="ig-link-status">
-                        <!-- Renders dynamically -->
+                    <h3><span class="material-icons-outlined">lock_open</span> Connect Instagram</h3>
+                    <p class="settings-desc">To load posts from accounts you follow, connect your Instagram session. This is a private key from your browser — MyFeed uses it to fetch posts on your behalf.</p>
+
+                    <div id="ig-session-status"></div>
+
+                    <!-- Step-by-step guide -->
+                    <div class="cookie-steps" id="cookie-setup-steps">
+                        <p class="steps-title">How to get your session key:</p>
+                        <ol class="steps-list">
+                            <li>Open <strong>Instagram.com</strong> in Chrome and log in</li>
+                            <li>Press <strong>F12</strong> (or right-click → Inspect)</li>
+                            <li>Click the <strong>Application</strong> tab</li>
+                            <li>In the left panel: <strong>Cookies → https://www.instagram.com</strong></li>
+                            <li>Find the row named <strong>sessionid</strong> and copy its value</li>
+                            <li>Paste it below and click Connect</li>
+                        </ol>
+                        <div class="cookie-visual">
+                            <span class="material-icons-outlined">table_rows</span>
+                            <span>Name: <strong>sessionid</strong> &nbsp;|&nbsp; Value: <em>a long string of letters and numbers</em></span>
+                        </div>
                     </div>
+
+                    <div id="ig-session-form">
+                        <div class="input-group" style="margin-top:12px">
+                            <span class="material-icons-outlined">vpn_key</span>
+                            <input type="password" id="ig-session-input" placeholder="Paste your sessionid value here">
+                            <button class="show-hide-btn" onclick="toggleSessionVisibility()" title="Show/hide">
+                                <span class="material-icons-outlined" id="session-eye-icon">visibility</span>
+                            </button>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                            <button class="btn btn-primary" style="flex:1" onclick="saveIGSession()">
+                                <span class="material-icons-outlined">check_circle</span> Connect
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="info-box" style="margin-top:12px">
+                        <span class="material-icons-outlined">security</span>
+                        <div>
+                            <strong>Privacy note</strong>
+                            <p>Your session key is stored only in your browser and sent only to MyFeed's own server to fetch posts. It is never shared with third parties. You can disconnect at any time.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cross-post Link -->
+                <div class="settings-card">
+                    <h3><span class="material-icons-outlined">link</span> Cross-post to Instagram</h3>
+                    <p class="settings-desc">Link your username to enable the cross-post option when creating posts.</p>
+                    <div class="ig-link-status" id="ig-link-status"></div>
                     <div id="ig-link-form">
                         <div class="input-group">
                             <span class="material-icons-outlined">alternate_email</span>
                             <input type="text" id="ig-link-username" placeholder="Your Instagram username">
                         </div>
                         <button class="btn btn-primary" onclick="linkInstagram()">
-                            <span class="material-icons-outlined">link</span> Link Account
+                            <span class="material-icons-outlined">link</span> Link Username
                         </button>
-                    </div>
-                    <div class="info-box">
-                        <span class="material-icons-outlined">info</span>
-                        <div>
-                            <strong>About Instagram Cross-Posting</strong>
-                            <p>Automatic cross-posting to Instagram requires a Business or Creator account connected via the <a href="https://developers.facebook.com/docs/instagram-api/" target="_blank">Instagram Graph API</a>. This feature requires Meta developer app approval. For now, linking your account enables the cross-post toggle when creating posts — full automation can be enabled once API access is configured.</p>
-                        </div>
                     </div>
                 </div>
 

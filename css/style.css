@@ -755,8 +755,62 @@ img { max-width: 100%; display: block; }
     cursor: pointer;
     font-family: inherit;
 }
-
 .btn-unlink:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Cookie setup steps */
+.cookie-steps {
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-bottom: 4px;
+}
+
+.steps-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    color: var(--text);
+}
+
+.steps-list {
+    padding-left: 20px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 2;
+}
+
+.steps-list strong { color: var(--text); }
+
+.cookie-visual {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+.cookie-visual .material-icons-outlined { font-size: 18px; color: var(--text-muted); flex-shrink: 0; }
+.cookie-visual em { color: var(--text-muted); font-style: normal; }
+
+/* Show/hide button inside input */
+.show-hide-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    flex-shrink: 0;
+    transition: color var(--transition);
+}
+.show-hide-btn:hover { color: var(--text); }
+.show-hide-btn .material-icons-outlined { font-size: 20px; }
 
 /* ========== Empty States ========== */
 .empty-state {

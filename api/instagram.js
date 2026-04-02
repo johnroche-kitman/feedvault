@@ -10,10 +10,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid username' });
     }
 
-    const sessionId = process.env.INSTAGRAM_SESSION_ID;
+    // Accept session from query param (user-provided) or fall back to env var
+    const sessionId = req.query.session || process.env.INSTAGRAM_SESSION_ID;
     if (!sessionId) {
         return res.status(503).json({
-            error: 'INSTAGRAM_SESSION_ID not configured',
+            error: 'No Instagram session provided',
             setup: true
         });
     }
