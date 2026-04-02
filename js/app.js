@@ -343,12 +343,12 @@ async function fetchIGPosts(username) {
     if (session) params.set('session', session);
 
     try {
-        const res = await fetch(`/api/instagram?${params}`);
+        const res  = await fetch(`/api/instagram?${params}`);
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            return { error: err.error || 'HTTP ' + res.status, setup: err.setup, expired: err.expired };
+            // Pass ALL error flags through so the feed can show the right message
+            return { error: data.error || 'HTTP ' + res.status, setup: data.setup, expired: data.expired, rateLimit: data.rateLimit, httpStatus: res.status };
         }
-        const data = await res.json();
         data.posts = (data.posts || []).map(p => ({ ...p, username }));
         return data;
     } catch (err) {
@@ -606,29 +606,35 @@ async function fetchAndRenderAccount(username) {
     const data = await getIGPostsCached(username);
 
     if (!data || !data.posts || data.posts.length === 0) {
-        let msg  = 'Could not load posts. This account may be private or Instagram is temporarily blocking requests.';
+        let msg    = '';
+        let detail = data?.error ? `<small style="color:var(--text-muted)">(${escapeHtml(data.error)})</small>` : '';
         let action = '';
-        if (data?.rateLimit) {
-            msg = 'Instagram rate limit hit — wait a few minutes and click Refresh.';
-        } else if (!getIGSession() || data?.setup) {
-            msg = 'Connect your Instagram session in Settings to load posts.';
+
+        if (!getIGSession() || data?.setup) {
+            msg    = 'Connect your Instagram session in Settings to load posts.';
+            detail = '';
             action = `<button class="btn btn-primary" style="margin-top:10px;width:auto;padding:8px 16px" onclick="showSection('settings')">
                           <span class="material-icons-outlined">settings</span> Go to Settings
                       </button>`;
         } else if (data?.expired) {
-            msg = 'Instagram session expired — go to Settings and reconnect.';
+            msg    = 'Instagram session expired — reconnect in Settings.';
+            detail = '';
             action = `<button class="btn btn-primary" style="margin-top:10px;width:auto;padding:8px 16px" onclick="showSection('settings')">
                           <span class="material-icons-outlined">refresh</span> Reconnect
                       </button>`;
-        } else if (data?.rateLimit) {
-            // already set above
+        } else if (data?.rateLimit || data?.httpStatus === 429) {
+            msg = 'Instagram rate limit hit — wait a few minutes then click Refresh.';
         } else if (location.port === '3000') {
-            msg = 'Deploy to Vercel to load live Instagram posts.';
+            msg    = 'Deploy to Vercel to load live Instagram posts.';
+            detail = '';
+        } else {
+            msg = 'Could not load posts.';
         }
+
         grid.innerHTML = `
             <div class="ig-fetch-failed">
                 <span class="material-icons-outlined">cloud_off</span>
-                <p>${msg}</p>
+                <p>${msg} ${detail}</p>
                 ${action}
                 <a href="https://instagram.com/${encodeURIComponent(username)}" target="_blank" rel="noopener" class="btn-visit" style="margin-top:8px">
                     View @${escapeHtml(username)} on Instagram <span class="material-icons-outlined" style="font-size:14px">open_in_new</span>
