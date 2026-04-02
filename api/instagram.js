@@ -11,7 +11,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid username' });
     }
 
-    const sessionId = req.query.session || process.env.INSTAGRAM_SESSION_ID;
+    // Decode in case the session was URL-encoded before being stored
+    const rawSession = req.query.session || process.env.INSTAGRAM_SESSION_ID || '';
+    const sessionId  = decodeURIComponent(rawSession);
     if (!sessionId) {
         return res.status(503).json({ error: 'No Instagram session provided', setup: true });
     }

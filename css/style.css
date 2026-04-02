@@ -788,6 +788,23 @@ img { max-width: 100%; display: block; }
 .connect-tab.active { background: var(--bg-card); color: var(--primary); box-shadow: var(--shadow-sm); }
 .connect-tab:hover:not(.active) { color: var(--text); }
 
+.test-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+.test-result .material-icons-outlined { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.test-result.testing  { background: var(--bg-input);    color: var(--text-secondary); }
+.test-result.success  { background: #f0fdf4;            color: #166534; }
+.test-result.fail     { background: #fef2f2;            color: #991b1b; }
+[data-theme="dark"] .test-result.success { background: #0a2618; color: #4ade80; }
+[data-theme="dark"] .test-result.fail    { background: #2d0b0b; color: #f87171; }
+
 .twofa-prompt {
     font-size: 0.9rem;
     color: var(--text-secondary);

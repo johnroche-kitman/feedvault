@@ -254,6 +254,49 @@ async function handleIG2FA() {
     }
 }
 
+async function testIGSession() {
+    const session  = getIGSession();
+    const resultEl = document.getElementById('ig-test-result');
+    const user     = getCurrentUser();
+    const testUser = user?.following?.[0]?.username || 'instagram';
+
+    resultEl.innerHTML = `<div class="test-result testing">
+        <span class="material-icons-outlined">hourglass_top</span> Testing connection with @${testUser}…
+    </div>`;
+
+    try {
+        const params = new URLSearchParams({ username: testUser, session });
+        const res    = await fetch(`/api/instagram-test?${params}`);
+        const data   = await res.json();
+
+        if (data.ok) {
+            resultEl.innerHTML = `<div class="test-result success">
+                <span class="material-icons-outlined">check_circle</span>
+                <strong>Working!</strong> ${escapeHtml(data.message)}
+            </div>`;
+            // Clear cache and reload feed
+            const cache = getIGCache();
+            (user.following || []).forEach(f => delete cache[f.username]);
+            saveIGCache(cache);
+            setTimeout(() => showSection('feed'), 800);
+        } else {
+            resultEl.innerHTML = `<div class="test-result fail">
+                <span class="material-icons-outlined">error_outline</span>
+                <div>
+                    <strong>Not working:</strong> ${escapeHtml(data.message)}
+                    ${data.isLoginPage ? '<br><small>Your session has expired. Please disconnect and reconnect.</small>' : ''}
+                    ${data.bodyPreview ? `<br><small style="word-break:break-all;color:var(--text-muted)">${escapeHtml(data.bodyPreview.slice(0,200))}</small>` : ''}
+                </div>
+            </div>`;
+        }
+    } catch (e) {
+        resultEl.innerHTML = `<div class="test-result fail">
+            <span class="material-icons-outlined">error_outline</span>
+            Connection error — make sure you're on the Vercel deployment, not GitHub Pages.
+        </div>`;
+    }
+}
+
 function applyIGSession(sessionId) {
     const user = getCurrentUser();
     user.igSession = sessionId;
@@ -281,6 +324,7 @@ function updateIGSessionUI() {
             <div class="ig-linked" style="margin-bottom:12px">
                 <span class="material-icons-outlined">check_circle</span>
                 <span>Instagram connected</span>
+                <button class="btn-sm" style="margin-left:auto;margin-right:6px" onclick="testIGSession()">Test</button>
                 <button class="btn-unlink" onclick="disconnectIGSession()">Disconnect</button>
             </div>`;
         formEl.style.display  = 'none';
