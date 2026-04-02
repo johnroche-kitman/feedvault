@@ -119,53 +119,26 @@ function showSection(name) {
 // Uses Instagram's own web API (same endpoint their site uses).
 // Works for public accounts — Instagram may block it for some.
 
-const IG_APP_ID = '936619743392459';
+// API endpoint — uses Vercel serverless function when deployed,
+// falls back to a note when running locally without the server.
+function getApiBase() {
+    // On Vercel the function is at /api/instagram
+    // Locally (static file server) it won't exist — show a helpful message
+    return '/api/instagram';
+}
 
-async function fetchIGPosts(username, cursor = null) {
-    const base = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
-    const proxy = 'https://corsproxy.io/?' + encodeURIComponent(base);
-
+async function fetchIGPosts(username) {
+    const url = `${getApiBase()}?username=${encodeURIComponent(username)}`;
     try {
-        const res = await fetch(proxy, {
-            headers: { 'x-ig-app-id': IG_APP_ID }
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const json = await res.json();
-        const userData = json?.data?.user;
-        if (!userData) throw new Error('No user data');
-
-        const media = userData.edge_owner_to_timeline_media || userData.edge_felix_video_timeline;
-        const edges = media?.edges || [];
-        const pageInfo = media?.page_info || {};
-
-        const posts = edges.map(e => {
-            const n = e.node;
-            const caption = n.edge_media_to_caption?.edges?.[0]?.node?.text || '';
-            // multi-image: first image or video thumbnail
-            const imageUrl = n.edge_sidecar_to_children?.edges?.[0]?.node?.display_url
-                          || n.display_url
-                          || n.thumbnail_src
-                          || null;
-            return {
-                id:        n.shortcode,
-                url:       `https://www.instagram.com/p/${n.shortcode}/`,
-                imageUrl,
-                caption,
-                likes:     n.edge_liked_by?.count ?? n.edge_media_preview_like?.count ?? null,
-                timestamp: n.taken_at_timestamp ? n.taken_at_timestamp * 1000 : null,
-                isVideo:   n.is_video || false,
-                username
-            };
-        });
-
-        return {
-            posts,
-            profilePic: userData.profile_pic_url,
-            fullName:   userData.full_name,
-            bio:        userData.biography,
-            nextCursor: pageInfo.end_cursor || null,
-            hasMore:    pageInfo.has_next_page || false
-        };
+        const res = await fetch(url);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'HTTP ' + res.status);
+        }
+        const data = await res.json();
+        // Attach username to each post
+        data.posts = (data.posts || []).map(p => ({ ...p, username }));
+        return data;
     } catch (err) {
         console.warn('IG fetch failed for', username, err.message);
         return null;
@@ -421,12 +394,16 @@ async function fetchAndRenderAccount(username) {
     const data = await getIGPostsCached(username);
 
     if (!data || !data.posts || data.posts.length === 0) {
+        const isLocal = location.protocol === 'file:' || location.port === '3000';
         grid.innerHTML = `
             <div class="ig-fetch-failed">
-                <span class="material-icons-outlined">wifi_off</span>
-                <p>Couldn't load posts — Instagram limits automated access.</p>
+                <span class="material-icons-outlined">cloud_off</span>
+                <p>${isLocal
+                    ? 'Deploy to Vercel to enable live Instagram posts — the API only works when hosted.'
+                    : 'Could not load posts. This account may be private, or Instagram is blocking the request.'
+                }</p>
                 <a href="https://instagram.com/${encodeURIComponent(username)}" target="_blank" rel="noopener" class="btn-visit">
-                    View on Instagram <span class="material-icons-outlined" style="font-size:14px">open_in_new</span>
+                    View @${escapeHtml(username)} on Instagram <span class="material-icons-outlined" style="font-size:14px">open_in_new</span>
                 </a>
             </div>`;
         return;
