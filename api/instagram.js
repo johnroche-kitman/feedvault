@@ -16,7 +16,7 @@ export default async function handler(request) {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
-        'Cache-Control': 's-maxage=3600, stale-while-revalidate=3600',
+        'Cache-Control': 'no-store',
     };
 
     const respond = (data, status = 200) =>
