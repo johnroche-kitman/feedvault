@@ -113,8 +113,15 @@ function shapeIGUser(userData) {
     const posts = edges.map(e => {
         const n       = e.node;
         const caption = n.edge_media_to_caption?.edges?.[0]?.node?.text || '';
-        const imageUrl = n.edge_sidecar_to_children?.edges?.[0]?.node?.display_url
-                       || n.display_url || n.thumbnail_src || null;
+        // Try every known location Instagram uses for the image URL
+        const imageUrl =
+            n.edge_sidecar_to_children?.edges?.[0]?.node?.display_url ||
+            n.display_url ||
+            n.thumbnail_src ||
+            n.display_resources?.[n.display_resources.length - 1]?.src ||
+            n.thumbnail_resources?.[n.thumbnail_resources.length - 1]?.src ||
+            n.image_versions2?.candidates?.[0]?.url ||
+            null;
         return {
             id: n.shortcode,
             url: `https://www.instagram.com/p/${n.shortcode}/`,
