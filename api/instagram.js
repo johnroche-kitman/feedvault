@@ -31,11 +31,16 @@ export default async function handler(request) {
 
     const log = [];
 
-    const result =
+    let result =
         await tryInstagramAPI(username, sessionId, log) ||
         await tryInstagramMobile(username, sessionId, log) ||
         await tryImginn(username, log) ||
         await tryPicuki(username, log);
+
+    // If we have posts but images are null, try filling them from Instagram embed pages
+    if (result && result.posts.some(p => !p.imageUrl)) {
+        await fillImagesFromEmbeds(result.posts, log);
+    }
 
     if (result) {
         if (debug) result._debug = log;
@@ -264,6 +269,36 @@ async function tryPicuki(username, log) {
         log.push({ source: 'picuki', error: e.message });
         return null;
     }
+}
+
+// ---- Fill missing image URLs from Instagram embed pages --------------------
+// Instagram's /p/SHORTCODE/embed/ is public, no auth needed, contains the image.
+async function fillImagesFromEmbeds(posts, log) {
+    const missing = posts.filter(p => !p.imageUrl).slice(0, 12);
+    if (!missing.length) return;
+
+    const results = await Promise.allSettled(
+        missing.map(async post => {
+            const r = await fetch(`https://www.instagram.com/p/${post.id}/embed/`, {
+                headers: {
+                    'User-Agent': UA_BROWSER,
+                    'Accept':     'text/html,*/*',
+                    'Referer':    'https://www.instagram.com/',
+                },
+            });
+            if (!r.ok) return;
+            const html = await r.text();
+            // Embed page has the image in an <img> tag with class EmbeddedMediaImage
+            // or just any scontent CDN URL
+            const m = html.match(/src="(https:\/\/scontent[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i)
+                   || html.match(/"thumbnail_src":"([^"]+)"/i)
+                   || html.match(/"display_url":"([^"]+)"/i);
+            if (m) post.imageUrl = m[1].replace(/\\u0026/g, '&');
+        })
+    );
+
+    const filled = results.filter(r => r.status === 'fulfilled').length;
+    log.push({ source: 'embed-fill', attempted: missing.length, filled });
 }
 
 function decodeEntities(str) {
