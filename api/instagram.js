@@ -271,34 +271,63 @@ async function tryPicuki(username, log) {
     }
 }
 
-// ---- Fill missing image URLs from Instagram embed pages --------------------
-// Instagram's /p/SHORTCODE/embed/ is public, no auth needed, contains the image.
+// ---- Fill missing image URLs ------------------------------------------------
+// Strategy: try picuki single-post page (no lazy load), then Instagram embed page.
 async function fillImagesFromEmbeds(posts, log) {
     const missing = posts.filter(p => !p.imageUrl).slice(0, 12);
     if (!missing.length) return;
 
-    const results = await Promise.allSettled(
-        missing.map(async post => {
-            const r = await fetch(`https://www.instagram.com/p/${post.id}/embed/`, {
-                headers: {
-                    'User-Agent': UA_BROWSER,
-                    'Accept':     'text/html,*/*',
-                    'Referer':    'https://www.instagram.com/',
-                },
-            });
-            if (!r.ok) return;
-            const html = await r.text();
-            // Embed page has the image in an <img> tag with class EmbeddedMediaImage
-            // or just any scontent CDN URL
-            const m = html.match(/src="(https:\/\/scontent[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i)
-                   || html.match(/"thumbnail_src":"([^"]+)"/i)
-                   || html.match(/"display_url":"([^"]+)"/i);
-            if (m) post.imageUrl = m[1].replace(/\\u0026/g, '&');
-        })
-    );
+    let filled = 0;
+    await Promise.allSettled(missing.map(async post => {
+        const url = await getImageFromPicukiMedia(post.id)
+                 || await getImageFromIGEmbed(post.id);
+        if (url) { post.imageUrl = url; filled++; }
+    }));
 
-    const filled = results.filter(r => r.status === 'fulfilled').length;
-    log.push({ source: 'embed-fill', attempted: missing.length, filled });
+    log.push({ source: 'image-fill', attempted: missing.length, filled });
+}
+
+async function getImageFromPicukiMedia(shortcode) {
+    try {
+        const r = await fetch(`https://www.picuki.com/media/${shortcode}`, {
+            headers: {
+                'User-Agent': UA_BROWSER,
+                'Accept':     'text/html',
+                'Referer':    'https://www.picuki.com/',
+            },
+        });
+        if (!r.ok) return null;
+        const html = await r.text();
+        const m = html.match(/class="post-image"[^>]*src="([^"]+)"/i)
+               || html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)
+               || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i)
+               || html.match(/src="(https:\/\/(?:scontent|[a-z0-9-]+\.cdninstagram)[^"]+)"/i);
+        return m ? cleanUrl(m[1]) : null;
+    } catch { return null; }
+}
+
+async function getImageFromIGEmbed(shortcode) {
+    try {
+        const r = await fetch(`https://www.instagram.com/p/${shortcode}/embed/`, {
+            headers: {
+                'User-Agent': UA_BROWSER,
+                'Accept':     'text/html',
+                'Referer':    'https://www.instagram.com/',
+            },
+        });
+        if (!r.ok) return null;
+        const html = await r.text();
+        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)
+               || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i)
+               || html.match(/src="(https:\/\/scontent[^"]+)"/i)
+               || html.match(/"display_url":"([^"]+)"/i);
+        return m ? cleanUrl(m[1]) : null;
+    } catch { return null; }
+}
+
+// Decode JSON-escaped URL characters from HTML-embedded JSON
+function cleanUrl(url) {
+    return url.replace(/\\u0026/g, '&').replace(/\\\//g, '/').replace(/\\u003d/g, '=');
 }
 
 function decodeEntities(str) {
