@@ -150,24 +150,39 @@ async function tryImginn(username, log) {
         if (!r.ok) return null;
         const html = await r.text();
 
-        const shortcodes = [], images = [], captions = [];
+        // Extract shortcode positions so we can pair images spatially
+        const scPositions = [];
         let m;
-        const scPat  = /href="\/p\/([A-Za-z0-9_-]+)\/"/g;
-        const imgPat = /class="img"[^>]*(?:data-src|src)="(https:\/\/[^"]+)"/g;
+        const scPat = /href="\/p\/([A-Za-z0-9_-]+)\/"/g;
+        while ((m = scPat.exec(html)) !== null) {
+            if (!scPositions.find(s => s.code === m[1]))
+                scPositions.push({ code: m[1], pos: m.index });
+        }
+
+        // Extract all CDN image positions (any https image URL)
+        const imgPositions = [];
+        const imgPat = /(?:src|data-src)="(https:\/\/[^"]{20,}\.(?:jpg|jpeg|png|webp)[^"]*)"/gi;
+        while ((m = imgPat.exec(html)) !== null) imgPositions.push({ url: m[1], pos: m.index });
+
         const capPat = /<p class="desc">([\s\S]*?)<\/p>/g;
-        while ((m = scPat.exec(html))  !== null) { if (!shortcodes.includes(m[1])) shortcodes.push(m[1]); }
-        while ((m = imgPat.exec(html)) !== null) images.push(m[1]);
+        const captions = [];
         while ((m = capPat.exec(html)) !== null) captions.push(decodeEntities(m[1].replace(/<[^>]+>/g, '')));
 
-        log.push({ source: 'imginn', shortcodes: shortcodes.length });
-        if (!shortcodes.length) return null;
+        log.push({ source: 'imginn', shortcodes: scPositions.length, images: imgPositions.length });
+        if (!scPositions.length) return null;
 
-        const count = Math.min(shortcodes.length, 12);
-        const posts = Array.from({ length: count }, (_, i) => ({
-            id: shortcodes[i], url: `https://www.instagram.com/p/${shortcodes[i]}/`,
-            imageUrl: images[i] || null, caption: captions[i] || '',
-            likes: null, timestamp: null, isVideo: false, source: 'imginn',
-        }));
+        const count = Math.min(scPositions.length, 12);
+        const posts = scPositions.slice(0, count).map((sc, i) => {
+            // Find the nearest image that appears after this shortcode link
+            const img = imgPositions.find(im => im.pos > sc.pos);
+            // Remove it so the next post gets the next image
+            if (img) imgPositions.splice(imgPositions.indexOf(img), 1);
+            return {
+                id: sc.code, url: `https://www.instagram.com/p/${sc.code}/`,
+                imageUrl: img?.url || null, caption: captions[i] || '',
+                likes: null, timestamp: null, isVideo: false, source: 'imginn',
+            };
+        });
 
         const titleMatch = html.match(/<title>([^<]+)<\/title>/);
         const fullName   = titleMatch ? titleMatch[1].replace(/\s*[@(|].*/, '').trim() : username;
@@ -193,28 +208,47 @@ async function tryPicuki(username, log) {
         if (!r.ok) return null;
         const html = await r.text();
 
-        const scPat  = /href="\/media\/([A-Za-z0-9_-]+)"/g;
-        const imgPat = /class="post-image"[^>]*src="([^"]+)"/g;
-        const capPat = /<div class="photo-description">([\s\S]*?)<\/div>/g;
-        const lkPat  = /<span class="likes">\s*([\d,KM.]+)\s*<\/span>/g;
-
-        const shortcodes = [], images = [], captions = [], likes = [];
+        // Extract shortcodes with positions
+        const scPositions = [];
         let m;
-        while ((m = scPat.exec(html))  !== null) { if (!shortcodes.includes(m[1])) shortcodes.push(m[1]); }
-        while ((m = imgPat.exec(html)) !== null) images.push(m[1]);
+        const scPat = /href="\/media\/([A-Za-z0-9_-]+)"/g;
+        while ((m = scPat.exec(html)) !== null) {
+            if (!scPositions.find(s => s.code === m[1]))
+                scPositions.push({ code: m[1], pos: m.index });
+        }
+
+        // Extract all image URLs with positions — try specific class first, then any CDN URL
+        const imgPositions = [];
+        const specificPat = /class="post-image"[^>]*src="([^"]+)"/g;
+        while ((m = specificPat.exec(html)) !== null) imgPositions.push({ url: m[1], pos: m.index });
+
+        if (!imgPositions.length) {
+            // Fallback: any CDN image URL
+            const cdnPat = /src="(https:\/\/(?:scontent|[a-z0-9-]+\.cdninstagram)[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/gi;
+            while ((m = cdnPat.exec(html)) !== null) imgPositions.push({ url: m[1], pos: m.index });
+        }
+
+        const capPat  = /<div class="photo-description">([\s\S]*?)<\/div>/g;
+        const lkPat   = /<span class="likes">\s*([\d,KM.]+)\s*<\/span>/g;
+        const captions = [], likes = [];
         while ((m = capPat.exec(html)) !== null) captions.push(decodeEntities(m[1].replace(/<[^>]+>/g, '')));
         while ((m = lkPat.exec(html))  !== null) likes.push(m[1].replace(/,/g, ''));
 
-        log.push({ source: 'picuki', shortcodes: shortcodes.length });
-        const count = Math.min(shortcodes.length, 12);
+        log.push({ source: 'picuki', shortcodes: scPositions.length, images: imgPositions.length });
+        const count = Math.min(scPositions.length, 12);
         if (!count) return null;
 
-        const posts = Array.from({ length: count }, (_, i) => ({
-            id: shortcodes[i], url: `https://www.instagram.com/p/${shortcodes[i]}/`,
-            imageUrl: images[i] || null, caption: captions[i] || '',
-            likes: likes[i] ? parseInt(likes[i]) || null : null,
-            timestamp: null, isVideo: false, source: 'picuki',
-        }));
+        const posts = scPositions.slice(0, count).map((sc, i) => {
+            const img = imgPositions.find(im => im.pos > sc.pos);
+            if (img) imgPositions.splice(imgPositions.indexOf(img), 1);
+            return {
+                id: sc.code, url: `https://www.instagram.com/p/${sc.code}/`,
+                imageUrl: img?.url || null,
+                caption: captions[i] || '',
+                likes: likes[i] ? parseInt(likes[i]) || null : null,
+                timestamp: null, isVideo: false, source: 'picuki',
+            };
+        });
 
         const titleMatch = html.match(/<title>([^<]+)<\/title>/);
         const fullName   = titleMatch ? titleMatch[1].replace(/\s*[@(].*/, '').trim() : username;
