@@ -1,5 +1,4 @@
 // Vercel Edge Function — runs on Vercel's edge network (different IPs than standard serverless).
-// Strategy chain: IG web API → IG mobile endpoint → imginn.com → picuki.com
 export const config = { runtime: 'edge' };
 
 const UA_BROWSER = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -18,7 +17,6 @@ export default async function handler(request) {
         'Access-Control-Allow-Methods': 'GET',
         'Cache-Control': 'no-store',
     };
-
     const respond = (data, status = 200) =>
         new Response(JSON.stringify(data), { status, headers: baseHeaders });
 
@@ -34,12 +32,11 @@ export default async function handler(request) {
     let result =
         await tryInstagramAPI(username, sessionId, log) ||
         await tryInstagramMobile(username, sessionId, log) ||
-        await tryImginn(username, log) ||
         await tryPicuki(username, log);
 
-    // If we have posts but images are null, try filling them from Instagram embed pages
+    // If posts came back with null imageUrls, fill them in parallel
     if (result && result.posts.some(p => !p.imageUrl)) {
-        await fillImagesFromEmbeds(result.posts, log);
+        await fillImages(result.posts, sessionId, log);
     }
 
     if (result) {
@@ -54,7 +51,7 @@ export default async function handler(request) {
     }, 429);
 }
 
-// ---- Attempt 1: Instagram web API (x-ig-app-id) ----------------------------
+// ---- Attempt 1: Instagram web API ----------------------------------------
 async function tryInstagramAPI(username, sessionId, log) {
     try {
         const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username.toLowerCase())}`;
@@ -75,16 +72,14 @@ async function tryInstagramAPI(username, sessionId, log) {
         log.push({ source: 'ig-web-api', status: r.status });
         if (!r.ok) return null;
         const json = await r.json();
-        const user = json?.data?.user;
-        if (!user) return null;
-        return shapeIGUser(user);
+        return shapeIGUser(json?.data?.user);
     } catch (e) {
         log.push({ source: 'ig-web-api', error: e.message });
         return null;
     }
 }
 
-// ---- Attempt 2: Instagram mobile i.instagram.com endpoint ------------------
+// ---- Attempt 2: i.instagram.com mobile endpoint --------------------------
 async function tryInstagramMobile(username, sessionId, log) {
     try {
         const url = `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username.toLowerCase())}`;
@@ -102,9 +97,7 @@ async function tryInstagramMobile(username, sessionId, log) {
         log.push({ source: 'ig-mobile-api', status: r.status });
         if (!r.ok) return null;
         const json = await r.json();
-        const user = json?.data?.user;
-        if (!user) return null;
-        return shapeIGUser(user);
+        return shapeIGUser(json?.data?.user);
     } catch (e) {
         log.push({ source: 'ig-mobile-api', error: e.message });
         return null;
@@ -112,24 +105,22 @@ async function tryInstagramMobile(username, sessionId, log) {
 }
 
 function shapeIGUser(userData) {
+    if (!userData) return null;
     const media    = userData.edge_owner_to_timeline_media || userData.edge_felix_video_timeline;
     const edges    = media?.edges || [];
     const pageInfo = media?.page_info || {};
     const posts = edges.map(e => {
         const n       = e.node;
         const caption = n.edge_media_to_caption?.edges?.[0]?.node?.text || '';
-        // Try every known location Instagram uses for the image URL
         const imageUrl =
             n.edge_sidecar_to_children?.edges?.[0]?.node?.display_url ||
             n.display_url ||
             n.thumbnail_src ||
-            n.display_resources?.[n.display_resources.length - 1]?.src ||
-            n.thumbnail_resources?.[n.thumbnail_resources.length - 1]?.src ||
-            n.image_versions2?.candidates?.[0]?.url ||
+            n.display_resources?.[n.display_resources?.length - 1]?.src ||
+            n.thumbnail_resources?.[n.thumbnail_resources?.length - 1]?.src ||
             null;
         return {
-            id: n.shortcode,
-            url: `https://www.instagram.com/p/${n.shortcode}/`,
+            id: n.shortcode, url: `https://www.instagram.com/p/${n.shortcode}/`,
             imageUrl, caption,
             likes:     n.edge_liked_by?.count ?? n.edge_media_preview_like?.count ?? null,
             timestamp: n.taken_at_timestamp ? n.taken_at_timestamp * 1000 : null,
@@ -146,73 +137,14 @@ function shapeIGUser(userData) {
     };
 }
 
-// ---- Attempt 3: imginn.com --------------------------------------------------
-async function tryImginn(username, log) {
-    try {
-        const url = `https://imginn.com/${encodeURIComponent(username)}/`;
-        const r   = await fetch(url, {
-            headers: {
-                'User-Agent':      UA_BROWSER,
-                'Accept':          'text/html,application/xhtml+xml,*/*;q=0.9',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer':         'https://imginn.com/',
-            },
-        });
-        log.push({ source: 'imginn', status: r.status });
-        if (!r.ok) return null;
-        const html = await r.text();
-
-        // Extract shortcode positions so we can pair images spatially
-        const scPositions = [];
-        let m;
-        const scPat = /href="\/p\/([A-Za-z0-9_-]+)\/"/g;
-        while ((m = scPat.exec(html)) !== null) {
-            if (!scPositions.find(s => s.code === m[1]))
-                scPositions.push({ code: m[1], pos: m.index });
-        }
-
-        // Extract all CDN image positions (any https image URL)
-        const imgPositions = [];
-        const imgPat = /(?:src|data-src)="(https:\/\/[^"]{20,}\.(?:jpg|jpeg|png|webp)[^"]*)"/gi;
-        while ((m = imgPat.exec(html)) !== null) imgPositions.push({ url: m[1], pos: m.index });
-
-        const capPat = /<p class="desc">([\s\S]*?)<\/p>/g;
-        const captions = [];
-        while ((m = capPat.exec(html)) !== null) captions.push(decodeEntities(m[1].replace(/<[^>]+>/g, '')));
-
-        log.push({ source: 'imginn', shortcodes: scPositions.length, images: imgPositions.length });
-        if (!scPositions.length) return null;
-
-        const count = Math.min(scPositions.length, 12);
-        const posts = scPositions.slice(0, count).map((sc, i) => {
-            // Find the nearest image that appears after this shortcode link
-            const img = imgPositions.find(im => im.pos > sc.pos);
-            // Remove it so the next post gets the next image
-            if (img) imgPositions.splice(imgPositions.indexOf(img), 1);
-            return {
-                id: sc.code, url: `https://www.instagram.com/p/${sc.code}/`,
-                imageUrl: img?.url || null, caption: captions[i] || '',
-                likes: null, timestamp: null, isVideo: false, source: 'imginn',
-            };
-        });
-
-        const titleMatch = html.match(/<title>([^<]+)<\/title>/);
-        const fullName   = titleMatch ? titleMatch[1].replace(/\s*[@(|].*/, '').trim() : username;
-        return { username, fullName, postCount: posts.length, hasMore: true, posts };
-    } catch (e) {
-        log.push({ source: 'imginn', error: e.message });
-        return null;
-    }
-}
-
-// ---- Attempt 4: picuki.com --------------------------------------------------
+// ---- Attempt 3: picuki.com (gets shortcodes reliably) --------------------
 async function tryPicuki(username, log) {
     try {
         const url = `https://www.picuki.com/profile/${encodeURIComponent(username)}`;
         const r   = await fetch(url, {
             headers: {
                 'User-Agent':      UA_MOBILE,
-                'Accept':          'text/html,application/xhtml+xml,*/*;q=0.8',
+                'Accept':          'text/html,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
         });
@@ -220,7 +152,6 @@ async function tryPicuki(username, log) {
         if (!r.ok) return null;
         const html = await r.text();
 
-        // Extract shortcodes with positions
         const scPositions = [];
         let m;
         const scPat = /href="\/media\/([A-Za-z0-9_-]+)"/g;
@@ -229,38 +160,20 @@ async function tryPicuki(username, log) {
                 scPositions.push({ code: m[1], pos: m.index });
         }
 
-        // Extract all image URLs with positions — try specific class first, then any CDN URL
-        const imgPositions = [];
-        const specificPat = /class="post-image"[^>]*src="([^"]+)"/g;
-        while ((m = specificPat.exec(html)) !== null) imgPositions.push({ url: m[1], pos: m.index });
+        const capPat = /<div class="photo-description">([\s\S]*?)<\/div>/g;
+        const captions = [];
+        while ((m = capPat.exec(html)) !== null)
+            captions.push(decodeEntities(m[1].replace(/<[^>]+>/g, '')));
 
-        if (!imgPositions.length) {
-            // Fallback: any CDN image URL
-            const cdnPat = /src="(https:\/\/(?:scontent|[a-z0-9-]+\.cdninstagram)[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/gi;
-            while ((m = cdnPat.exec(html)) !== null) imgPositions.push({ url: m[1], pos: m.index });
-        }
-
-        const capPat  = /<div class="photo-description">([\s\S]*?)<\/div>/g;
-        const lkPat   = /<span class="likes">\s*([\d,KM.]+)\s*<\/span>/g;
-        const captions = [], likes = [];
-        while ((m = capPat.exec(html)) !== null) captions.push(decodeEntities(m[1].replace(/<[^>]+>/g, '')));
-        while ((m = lkPat.exec(html))  !== null) likes.push(m[1].replace(/,/g, ''));
-
-        log.push({ source: 'picuki', shortcodes: scPositions.length, images: imgPositions.length });
+        log.push({ source: 'picuki', shortcodes: scPositions.length });
         const count = Math.min(scPositions.length, 12);
         if (!count) return null;
 
-        const posts = scPositions.slice(0, count).map((sc, i) => {
-            const img = imgPositions.find(im => im.pos > sc.pos);
-            if (img) imgPositions.splice(imgPositions.indexOf(img), 1);
-            return {
-                id: sc.code, url: `https://www.instagram.com/p/${sc.code}/`,
-                imageUrl: img?.url || null,
-                caption: captions[i] || '',
-                likes: likes[i] ? parseInt(likes[i]) || null : null,
-                timestamp: null, isVideo: false, source: 'picuki',
-            };
-        });
+        const posts = scPositions.slice(0, count).map((sc, i) => ({
+            id: sc.code, url: `https://www.instagram.com/p/${sc.code}/`,
+            imageUrl: null, caption: captions[i] || '',
+            likes: null, timestamp: null, isVideo: false, source: 'picuki',
+        }));
 
         const titleMatch = html.match(/<title>([^<]+)<\/title>/);
         const fullName   = titleMatch ? titleMatch[1].replace(/\s*[@(].*/, '').trim() : username;
@@ -271,23 +184,80 @@ async function tryPicuki(username, log) {
     }
 }
 
-// ---- Fill missing image URLs ------------------------------------------------
-// Strategy: try picuki single-post page (no lazy load), then Instagram embed page.
-async function fillImagesFromEmbeds(posts, log) {
+// ---- Fill missing image URLs -----------------------------------------------
+// Three strategies run in parallel per post:
+// 1. Instagram media/info API (different endpoint, may have separate rate limit)
+// 2. Instagram post page og:image (server-side rendered meta tag)
+// 3. Picuki individual media page
+async function fillImages(posts, sessionId, log) {
     const missing = posts.filter(p => !p.imageUrl).slice(0, 12);
     if (!missing.length) return;
 
     let filled = 0;
     await Promise.allSettled(missing.map(async post => {
-        const url = await getImageFromPicukiMedia(post.id)
-                 || await getImageFromIGEmbed(post.id);
+        const url =
+            await getFromMediaInfoAPI(post.id, sessionId) ||
+            await getFromIGPostOG(post.id, sessionId)     ||
+            await getFromPicukiMedia(post.id);
         if (url) { post.imageUrl = url; filled++; }
     }));
 
-    log.push({ source: 'image-fill', attempted: missing.length, filled });
+    log.push({ source: 'fill', attempted: missing.length, filled });
 }
 
-async function getImageFromPicukiMedia(shortcode) {
+// Strategy A: Instagram's per-media info API (mobile endpoint)
+// Decodes the shortcode to a numeric media ID, then calls the info endpoint.
+async function getFromMediaInfoAPI(shortcode, sessionId) {
+    try {
+        const mediaId = shortcodeToId(shortcode);
+        const r = await fetch(`https://i.instagram.com/api/v1/media/${mediaId}/info/`, {
+            headers: {
+                'User-Agent':  UA_MOBILE,
+                'Accept':      '*/*',
+                'x-ig-app-id': '936619743392459',
+                'Cookie':      `sessionid=${sessionId}`,
+            },
+        });
+        if (!r.ok) return null;
+        const json = await r.json();
+        const item = json?.items?.[0];
+        if (!item) return null;
+        return item.image_versions2?.candidates?.[0]?.url
+            || item.carousel_media?.[0]?.image_versions2?.candidates?.[0]?.url
+            || null;
+    } catch { return null; }
+}
+
+// Decode Instagram shortcode → numeric media ID
+function shortcodeToId(shortcode) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let id = 0n;
+    for (const c of shortcode) id = id * 64n + BigInt(chars.indexOf(c));
+    return id.toString();
+}
+
+// Strategy B: Instagram post page og:image (server-side rendered by Instagram for sharing)
+async function getFromIGPostOG(shortcode, sessionId) {
+    try {
+        const r = await fetch(`https://www.instagram.com/p/${shortcode}/`, {
+            headers: {
+                'User-Agent': UA_BROWSER,
+                'Accept':     'text/html',
+                'Referer':    'https://www.instagram.com/',
+                'Cookie':     `sessionid=${sessionId}`,
+            },
+        });
+        if (!r.ok) return null;
+        const html = await r.text();
+        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)
+               || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i)
+               || html.match(/"display_url":"([^"]+)"/i);
+        return m ? cleanUrl(m[1]) : null;
+    } catch { return null; }
+}
+
+// Strategy C: Picuki individual post page (server-side rendered, not lazy-loaded)
+async function getFromPicukiMedia(shortcode) {
     try {
         const r = await fetch(`https://www.picuki.com/media/${shortcode}`, {
             headers: {
@@ -306,26 +276,6 @@ async function getImageFromPicukiMedia(shortcode) {
     } catch { return null; }
 }
 
-async function getImageFromIGEmbed(shortcode) {
-    try {
-        const r = await fetch(`https://www.instagram.com/p/${shortcode}/embed/`, {
-            headers: {
-                'User-Agent': UA_BROWSER,
-                'Accept':     'text/html',
-                'Referer':    'https://www.instagram.com/',
-            },
-        });
-        if (!r.ok) return null;
-        const html = await r.text();
-        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)
-               || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i)
-               || html.match(/src="(https:\/\/scontent[^"]+)"/i)
-               || html.match(/"display_url":"([^"]+)"/i);
-        return m ? cleanUrl(m[1]) : null;
-    } catch { return null; }
-}
-
-// Decode JSON-escaped URL characters from HTML-embedded JSON
 function cleanUrl(url) {
     return url.replace(/\\u0026/g, '&').replace(/\\\//g, '/').replace(/\\u003d/g, '=');
 }
