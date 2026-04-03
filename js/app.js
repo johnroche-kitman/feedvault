@@ -633,12 +633,12 @@ async function fetchAndRenderAccount(username) {
         return;
     }
 
-    const firstEmbed = renderIGEmbed(data.posts[0]);
-    const morePosts  = data.posts.slice(1);
+    const firstCard = renderIGPostCard(data.posts[0]);
+    const morePosts = data.posts.slice(1);
 
     const moreHtml = morePosts.length
         ? `<div id="ig-more-${escapeHtml(username)}" style="display:none">
-               ${morePosts.map(p => renderIGEmbed(p)).join('')}
+               <div class="ig-posts-row">${morePosts.map(p => renderIGPostCard(p)).join('')}</div>
            </div>
            <button class="btn-load-more" id="loadmore-${escapeHtml(username)}"
                    onclick="showMoreIGPosts('${safeAttr(username)}')">
@@ -646,19 +646,33 @@ async function fetchAndRenderAccount(username) {
            </button>`
         : '';
 
-    grid.innerHTML = firstEmbed + moreHtml;
-    setTimeout(() => window.instgrm?.Embeds?.process(), 100);
+    grid.innerHTML = `<div class="ig-posts-row">${firstCard}</div>${moreHtml}`;
 }
 
-function renderIGEmbed(post) {
-    return `<div class="ig-embed-container">
-        <blockquote class="instagram-media"
-            data-instgrm-permalink="${escapeHtml(post.url)}"
-            data-instgrm-version="14"
-            data-instgrm-captioned
-            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,.5),0 1px 10px 0 rgba(0,0,0,.15);margin:0;max-width:540px;min-width:326px;padding:0;width:calc(100% - 2px);">
-        </blockquote>
-    </div>`;
+function renderIGPostCard(post) {
+    const caption = post.caption
+        ? escapeHtml(post.caption.length > 120 ? post.caption.slice(0, 117) + '…' : post.caption)
+        : '';
+    const time = post.timestamp ? timeAgo(new Date(post.timestamp)) : '';
+
+    return `
+        <div class="ig-post-card-item" onclick="window.open('${escapeHtml(post.url)}','_blank')">
+            ${post.imageUrl
+                ? `<div class="ig-post-thumb-wrap">
+                       <img class="ig-post-thumb" src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy"
+                            onerror="this.parentElement.innerHTML='<div class=\\"thumb-error\\"><span class=\\"material-icons-outlined\\">broken_image</span></div>'">
+                       ${post.isVideo ? '<span class="video-badge"><span class="material-icons-outlined">play_circle</span></span>' : ''}
+                   </div>`
+                : `<div class="ig-post-thumb-wrap"><div class="thumb-error"><span class="material-icons-outlined">photo</span></div></div>`
+            }
+            <div class="ig-post-card-body">
+                ${caption ? `<p class="ig-post-caption">${caption}</p>` : ''}
+                <div class="ig-post-meta">
+                    ${post.likes !== null ? `<span><span class="material-icons-outlined" style="font-size:14px;color:var(--accent)">favorite</span> ${formatCount(post.likes)}</span>` : ''}
+                    ${time ? `<span>${time}</span>` : ''}
+                </div>
+            </div>
+        </div>`;
 }
 
 function renderLocalPost(post, user) {
