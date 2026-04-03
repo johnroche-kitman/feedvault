@@ -327,12 +327,12 @@ function updateIGSessionUI() {
                 <button class="btn-sm" style="margin-left:auto;margin-right:6px" onclick="testIGSession()">Test</button>
                 <button class="btn-unlink" onclick="disconnectIGSession()">Disconnect</button>
             </div>`;
-        formEl.style.display  = 'none';
-        stepsEl.style.display = 'none';
+        formEl.style.display = 'none';
+        if (stepsEl) stepsEl.style.display = 'none';
     } else {
-        statusEl.innerHTML    = '';
-        formEl.style.display  = '';
-        stepsEl.style.display = '';
+        statusEl.innerHTML   = '';
+        formEl.style.display = '';
+        if (stepsEl) stepsEl.style.display = '';
     }
 }
 
@@ -372,23 +372,13 @@ async function getIGPostsCached(username, forceRefresh = false) {
     return result;
 }
 
-// Load more posts for an account (appends to cache)
-async function loadMorePosts(username) {
-    const btn = document.getElementById('loadmore-' + username);
-    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
-
-    const cache = getIGCache();
-    const entry = cache[username];
-    const cursor = entry?.nextCursor;
-    if (!cursor) return;
-
-    // For simplicity, re-fetch (Instagram's public endpoint doesn't easily paginate without auth)
-    // so we just show a note about visiting Instagram for more
-    if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Load more on Instagram';
-        btn.onclick = () => window.open(`https://www.instagram.com/${encodeURIComponent(username)}/`, '_blank');
-    }
+// Reveal hidden embeds and trigger embed.js to process them
+function showMoreIGPosts(username) {
+    const more = document.getElementById('ig-more-' + username);
+    const btn  = document.getElementById('loadmore-' + username);
+    if (more) more.style.display = '';
+    if (btn)  btn.style.display  = 'none';
+    setTimeout(() => window.instgrm?.Embeds?.process(), 100);
 }
 
 // ---- Following Management ----------------------------------
@@ -643,41 +633,32 @@ async function fetchAndRenderAccount(username) {
         return;
     }
 
-    const postsHtml = data.posts.map(p => renderIGPostCard(p)).join('');
+    const firstEmbed = renderIGEmbed(data.posts[0]);
+    const morePosts  = data.posts.slice(1);
 
-    const loadMoreBtn = data.hasMore
-        ? `<button class="btn-load-more" id="loadmore-${escapeHtml(username)}" onclick="loadMorePosts('${safeAttr(username)}')">
-               <span class="material-icons-outlined">expand_more</span> Load more
+    const moreHtml = morePosts.length
+        ? `<div id="ig-more-${escapeHtml(username)}" style="display:none">
+               ${morePosts.map(p => renderIGEmbed(p)).join('')}
+           </div>
+           <button class="btn-load-more" id="loadmore-${escapeHtml(username)}"
+                   onclick="showMoreIGPosts('${safeAttr(username)}')">
+               <span class="material-icons-outlined">expand_more</span> Load more posts
            </button>`
         : '';
 
-    grid.innerHTML = `<div class="ig-posts-row">${postsHtml}</div>${loadMoreBtn}`;
+    grid.innerHTML = firstEmbed + moreHtml;
+    setTimeout(() => window.instgrm?.Embeds?.process(), 100);
 }
 
-function renderIGPostCard(post) {
-    const time = post.timestamp ? timeAgo(new Date(post.timestamp)) : '';
-    const caption = post.caption
-        ? escapeHtml(post.caption.length > 120 ? post.caption.slice(0, 117) + '…' : post.caption)
-        : '';
-
-    return `
-        <div class="ig-post-card-item" onclick="window.open('${escapeHtml(post.url)}','_blank')">
-            ${post.imageUrl
-                ? `<div class="ig-post-thumb-wrap">
-                       <img class="ig-post-thumb" src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy"
-                            onerror="this.parentElement.innerHTML='<div class=\\"thumb-error\\"><span class=\\"material-icons-outlined\\">broken_image</span></div>'">
-                       ${post.isVideo ? '<span class="video-badge"><span class="material-icons-outlined">play_circle</span></span>' : ''}
-                   </div>`
-                : `<div class="ig-post-thumb-wrap"><div class="thumb-error"><span class="material-icons-outlined">image_not_supported</span></div></div>`
-            }
-            <div class="ig-post-card-body">
-                ${caption ? `<p class="ig-post-caption">${caption}</p>` : ''}
-                <div class="ig-post-meta">
-                    ${post.likes !== null ? `<span><span class="material-icons-outlined" style="font-size:14px;color:var(--accent)">favorite</span> ${formatCount(post.likes)}</span>` : ''}
-                    ${time ? `<span>${time}</span>` : ''}
-                </div>
-            </div>
-        </div>`;
+function renderIGEmbed(post) {
+    return `<div class="ig-embed-container">
+        <blockquote class="instagram-media"
+            data-instgrm-permalink="${escapeHtml(post.url)}"
+            data-instgrm-version="14"
+            data-instgrm-captioned
+            style="background:#FFF;border:0;border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,.5),0 1px 10px 0 rgba(0,0,0,.15);margin:0;max-width:540px;min-width:326px;padding:0;width:calc(100% - 2px);">
+        </blockquote>
+    </div>`;
 }
 
 function renderLocalPost(post, user) {

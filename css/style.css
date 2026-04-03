@@ -944,6 +944,16 @@ img { max-width: 100%; display: block; }
     border-bottom: 1px solid var(--border);
 }
 
+/* Instagram embed wrapper */
+.ig-embed-container {
+    padding: 0 16px 16px;
+    display: flex;
+    justify-content: center;
+}
+.ig-embed-container blockquote {
+    flex: 1;
+}
+
 /* Posts row — horizontal scroll on small screens */
 .ig-posts-row {
     display: grid;
